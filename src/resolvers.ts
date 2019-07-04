@@ -2,25 +2,26 @@
 import * as bcrypt from 'bcryptjs';
 import { IResolvers } from 'graphql-tools';
 import { createTokens } from './auth';
-import { Contacts } from './entity/Contact';
-import { Users } from "./entity/User";
+import { Contact } from './entity/Contact';
+import { User } from "./entity/User";
 
 
 
 export const resolvers: IResolvers ={
     
     Query:{
-        user:(_,__,{req})=>{  
-            if(!req.userId){
-                return null;
-            }
-            return Users.findOne(req.userId);
-        }
+        user: async(_, args) => {
+           // (_, args, context)
+           const user = await User.findOne({where: { id:args.id }});
+           const contact = await Contact.find({where: { rca_id:args.id }});
+           //console.log(user);
+           return {user,contact}
+          },
     },
     Mutation:{
         register:async(_,{first_name,last_name,phone,username,password})=>{
             const hashedPassword =await bcrypt.hash(password,10);
-            await Users.create({
+            await User.create({
                 first_name,
                 last_name,
                 phone,
@@ -32,8 +33,8 @@ export const resolvers: IResolvers ={
 
          return true;
         },
-        login:async(_,{username,password},{res})=>{
-            const user = await Users.findOne({where: { username }});
+        login:async(_,{username,password})=>{
+            const user = await User.findOne({where: { username }});
             if(!user){
                 throw new Error ('user  does not exist');
             }
@@ -43,15 +44,11 @@ export const resolvers: IResolvers ={
             if(!valid){
                 throw new Error('password incorrect');
             }
-
-           const {accessToken, refreshToken}=createTokens(user);
-
-            res.cookie("refresh-token",refreshToken,expire:30);
-            res.cookie("access_token", accessToken, { expire: 60 * 15 });
-
-
-         return user;
-            
+            const accessToken=createTokens(user);
+            return accessToken;
+            // {
+            //     "Authorization": "Bearer <JWT>"
+            //   }  //add  this commented line for JWT token authorization header
   
         },
         invalidateTokens:async(_,__,{req})=>{
@@ -59,7 +56,7 @@ export const resolvers: IResolvers ={
                 return false;
             }
 
-            const user=await Users.findOne(req.userId);
+            const user=await User.findOne(req.userId);
             if(!user){
                 return false;
             }
@@ -71,16 +68,15 @@ export const resolvers: IResolvers ={
         },
          
          addContact:async (_, { name, village, district, crop, contact_no, rca_id},{req}) => {
-              if (!req.userId) {
-            //     // return null;
-            //     //console.log("token not  exist");
-            //      //throw new Error('Unauthorized');
-            //     
-                 return false;
+            const token = req.headers.authorization;
+            
+              if (!token) {
+           
+                 return "Access Denied";
              }
              else{
-             console.log('cookie: ', req.cookies.access_token);
-                 const contact=Contacts.create({
+            
+                 Contact.create({
                      name,
                      village,
                      district,
@@ -91,7 +87,8 @@ export const resolvers: IResolvers ={
 
                  }).save();
 
-               return contact;
+               //return contact;
+               return "Contact Added Successfully";
             
              } 
                  
